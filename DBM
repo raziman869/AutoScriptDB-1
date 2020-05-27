@@ -12,7 +12,7 @@
 #############################
 # Variables (Can be changed depends on your preferred values)
 # Script name
-MyScriptName='JohnFordTV-DEB10 Script'
+MyScriptName='JohnFordTV-Premium Script'
 
 # OpenSSH Ports
 SSH_Port1='22'
@@ -40,6 +40,7 @@ Privoxy_Port2='8086'
 # Squid Ports
 Squid_Port1='3355'
 Squid_Port2='8085'
+Squid_Port3='60000'
 
 # OpenVPN Config Download Port
 OvpnDownload_Port='85' # Before changing this value, please read this document. It contains all unsafe ports for Google Chrome Browser, please read from line #23 to line #89: https://chromium.googlesource.com/chromium/src.git/+/refs/heads/master/net/base/port_util.cc
@@ -59,6 +60,41 @@ MyVPS_Time='Asia/Manila'
 #############################
 #############################
 
+function InstCategory(){
+echo -e "==================================================================="
+echo -e "        Select Server Category | AUTOSCRIPT BY JOHNFORDTV          "
+echo -e "==================================================================="
+echo -e " "
+echo -e "1 ) PREMIUM "
+echo -e "2 ) VIP "
+echo -e "3 ) PRIVATE "
+echo -e ""
+read -p "Select: " x
+if test $x -eq 1; then
+echo -e "Selected PREMIUM as Server Category!"
+MYCATEGORY='premium.sh'
+elif test $x -eq 2; then
+echo -e "Selected VIP as Server Category!"
+MYCATEGORY='vip.sh'
+elif test $x -eq 3; then
+echo -e "Selected PRIVATE as Server Category!"
+MYCATEGORY='private.sh'
+else
+echo "Invalid Selection!"
+fi
+
+echo -e "==================================================================="
+echo -e "     Set Your Panel Database Info | AUTOSCRIPT BY JOHNFORDTV       "
+echo -e "==================================================================="
+read -p "Database Host: " -e -i 127.0.0.1 DatabaseHost
+read -p "Database Password: " -e -i JohnFordTV DatabasePass
+read -p "Database User: " -e -i root DatabaseUser
+read -p "Database Name: " -e -i yellowpanel DatabaseName
+echo -e ""
+echo -e "Okay, that's all I need. We are ready to setup your server now!"
+read -n1 -r -p "Press any key to continue..."
+}
+
 function InstUpdates(){
  export DEBIAN_FRONTEND=noninteractive
  apt-get update
@@ -66,10 +102,12 @@ function InstUpdates(){
  
  # Removing some firewall tools that may affect other services
  apt-get remove --purge ufw firewalld -y
-
+ 
+ # Installing apt-transport-https and needed files
+ apt-get install apt-transport-https lsb-release libdbi-perl libecap3 -y
  
  # Installing some important machine essentials
- apt-get install nano wget curl zip unzip tar gzip p7zip-full bc rc openssl cron net-tools dnsutils dos2unix screen bzip2 ccrypt -y
+ apt-get install telnet nano wget curl zip unzip mysql tar gzip p7zip-full bc rc screen openssl cron net-tools dnsutils dos2unix screen bzip2 ccrypt -y
  
  # Now installing all our wanted services
  apt-get install dropbear stunnel4 privoxy ca-certificates nginx ruby apt-transport-https lsb-release squid -y
@@ -77,10 +115,6 @@ function InstUpdates(){
  # Installing all required packages to install Webmin
  apt-get install perl libnet-ssleay-perl openssl libauthen-pam-perl libpam-runtime libio-pty-perl apt-show-versions python dbus libxml-parser-perl -y
  apt-get install shared-mime-info jq fail2ban -y
-
- 
- # Installing a text colorizer
- gem install lolcat
 
  # Trying to remove obsolette packages after installation
  apt-get autoremove -y
@@ -91,6 +125,54 @@ function InstUpdates(){
  wget -qO - http://build.openvpn.net/debian/openvpn/stable/pubkey.gpg|apt-key add -
  apt-get update
  apt-get install openvpn -y
+ 
+ # Trying to remove obsolette packages after installation
+ apt-get autoremove -y
+ 
+ # Installing sury repo by pulling its repository inside sources.list file 
+ wget -O /etc/apt/trusted.gpg.d/php.gpg https://packages.sury.org/php/apt.gpg
+ sleep 2
+ echo "deb https://packages.sury.org/php/ $(lsb_release -sc) main" > /etc/apt/sources.list.d/php.list
+ apt-get update
+ 
+ # Installing php 5.6
+ apt-get install php5.6 php5.6-fpm php5.6-mcrypt php5.6-pdo php5.6-sqlite3 php5.6-mbstring php5.6-curl php5.6-cli php5.6-mysql php5.6-gd php5.6-intl php5.6-xsl php5.6-xml php5.6-zip php5.6-xmlrpc libapache2-mod-php5.6 -y
+}
+
+function InstApache(){
+ 
+ # Add servername on apache conf
+ echo "ServerName localhost" >> /etc/apache2/apache2.conf
+ 
+ # modify apache configs
+ rm -f /etc/apache2/sites-enabled/000-default.conf
+ wget -O /etc/apache2/sites-enabled/johnfordtv.conf "https://raw.githubusercontent.com/johndesu090/johnfordtv/master/johnfordtvhttpd.conf"
+ sed -i "s|yourserver|localhost|g" /etc/apache2/sites-enabled/johnfordtv.conf 
+ sed -i "s|ServerAlias|#ServerAlias|g" /etc/apache2/sites-enabled/johnfordtv.conf 
+ 
+ # Modifying apache modules
+ a2dismod mpm_event
+ a2enmod php5.6
+ a2enmod rewrite
+ a2enmod proxy_fcgi setenvif
+ a2enconf php5.6-fpm
+ ln -sf /etc/apache2/mods-available/headers.load /etc/apache2/mods-enabled/headers.load
+ systemctl restart apache2
+ 
+ # Add Localhost Domain to Hosts
+ echo "127.0.0.1  localhost" >> /etc/hosts
+ 
+ # Setup dir and permissions
+ useradd -m panel
+ mkdir -p /home/panel/html
+ echo "<?php phpinfo() ?>" > /home/panel/html/info.php
+ chown -R www-data:www-data /home/panel/html
+ chmod -R g+rw /home/panel/html
+ #chcon -R -t httpd_sys_rw_content_t /home/panel/html
+ 
+ # Then restart to take effect
+ service php5.6-fpm restart
+ service apache2 restart
 }
 
 function InstWebmin(){
@@ -248,10 +330,174 @@ function InsOpenVPN(){
 
  # Removing all existing openvpn server files
  rm -rf /etc/openvpn/*
+ mkdir /etc/openvpn/script
+ 
+ # Create OpenVPN configs download dir
+ mkdir -p /var/www/openvpn
+ 
+ # Creating our root directory for all of our .ovpn configs
+ mkdir -p /home/panel/html/online
 
  # Creating server.conf, ca.crt, server.crt and server.key
+ cat <<'EOF' >/etc/openvpn/script/premium.sh
+#!/bin/bash
+. /etc/openvpn/script/config.sh
+
+
+##PREMIUM##
+PRE="users.user_name='$username' AND users.auth_vpn=md5('$password') AND users.is_validated=1 AND users.is_freeze=0 AND users.is_active=1 AND users.is_ban=0 AND users.duration > 0"
+
+Query="SELECT users.user_name FROM users WHERE $PRE"
+user_name=`mysql -u $USER -p$PASS -D $DB -h $HOST --skip-column-name -e "$Query"`
+
+[ "$user_name" != '' ] && [ "$user_name" = "$username" ] && echo "user : $username" && echo 'authentication ok.' && exit 0 || echo 'authentication failed.'; exit 1
+
+EOF
+
+ cat <<'EOF' >/etc/openvpn/script/vip.sh
+#!/bin/bash
+. /etc/openvpn/script/config.sh
+
+
+##VIP##
+PRE="users.user_name='$username' AND users.auth_vpn=md5('$password') AND users.is_validated=1 AND users.is_freeze=0 AND users.is_active=1 AND users.is_ban=0 AND users.vip_duration > 0"
+
+Query="SELECT users.user_name FROM users WHERE $PRE"
+user_name=`mysql -u $USER -p$PASS -D $DB -h $HOST --skip-column-name -e "$Query"`
+
+[ "$user_name" != '' ] && [ "$user_name" = "$username" ] && echo "user : $username" && echo 'authentication ok.' && exit 0 || echo 'authentication failed.'; exit 1
+
+EOF
+
+ cat <<'EOF' >/etc/openvpn/script/private.sh
+#!/bin/bash
+. /etc/openvpn/script/config.sh
+
+
+##PRIVATE##
+PRE="users.user_name='$username' AND users.auth_vpn=md5('$password') AND users.is_validated=1 AND users.is_freeze=0 AND users.is_active=1 AND users.is_ban=0 AND users.private_duration > 0"
+
+Query="SELECT users.user_name FROM users WHERE $PRE"
+user_name=`mysql -u $USER -p$PASS -D $DB -h $HOST --skip-column-name -e "$Query"`
+
+[ "$user_name" != '' ] && [ "$user_name" = "$username" ] && echo "user : $username" && echo 'authentication ok.' && exit 0 || echo 'authentication failed.'; exit 1
+
+EOF
+
+ cat <<'EOF' >/etc/openvpn/script/connectpremium.sh
+#!/bin/bash
+
+tm="$(date +%s)"
+dt="$(date +'%Y-%m-%d %H:%M:%S')"
+timestamp="$(date +'%FT%TZ')"
+
+. /etc/openvpn/script/config.sh
+
+##set status online to user connected
+bandwidth_check=`mysql -u $USER -p$PASS -D $DB -h $HOST --skip-column-name -e "SELECT bandwidth_logs.username FROM bandwidth_logs WHERE bandwidth_logs.username='$common_name' AND bandwidth_logs.category='premium' AND bandwidth_logs.status='online'"`
+if [ "$bandwidth_check" == 1 ]; then
+	mysql -u $USER -p$PASS -D $DB -h $HOST -e "UPDATE bandwith_logs SET server_ip='$local_1', server_port='$trusted_port', timestamp='$timestamp', ipaddress='$trusted_ip:$trusted_port', username='$common_name', time_in='$tm', since_connected='$time_ascii', bytes_received='$bytes_received', bytes_sent='$bytes_sent' WHERE username='$common_name' AND status='online' AND category='premium' "
+else
+	mysql -u $USER -p$PASS -D $DB -h $HOST -e "INSERT INTO bandwidth_logs (server_ip, server_port, timestamp, ipaddress, since_connected, username, bytes_received, bytes_sent, time_in, status, time, category) VALUES ('$local_1','$trusted_port','$timestamp','$trusted_ip:$trusted_port','$time_ascii','$common_name','$bytes_received','$bytes_sent','$dt','online','$tm','premium') "
+fi
+
+EOF
+
+ cat <<'EOF' >/etc/openvpn/script/disconnectpremium.sh
+#!/bin/bash
+tm="$(date +%s)"
+dt="$(date +'%Y-%m-%d %H:%M:%S')"
+timestamp="$(date +'%FT%TZ')"
+
+. /etc/openvpn/script/config.sh
+
+mysql -u $USER -p$PASS -D $DB -h $HOST -e "UPDATE bandwidth_logs SET bytes_received='$bytes_received',bytes_sent='$bytes_sent',time_out='$dt', status='offline' WHERE username='$common_name' AND status='online' AND category='premium' "
+
+EOF
+
+ cat <<'EOF' >/etc/openvpn/script/connectvip.sh
+#!/bin/bash
+
+tm="$(date +%s)"
+dt="$(date +'%Y-%m-%d %H:%M:%S')"
+timestamp="$(date +'%FT%TZ')"
+
+. /etc/openvpn/script/config.sh
+
+##set status online to user connected
+bandwidth_check=`mysql -u $USER -p$PASS -D $DB -h $HOST --skip-column-name -e "SELECT bandwidth_logs.username FROM bandwidth_logs WHERE bandwidth_logs.username='$common_name' AND bandwidth_logs.category='vip' AND bandwidth_logs.status='online'"`
+if [ "$bandwidth_check" == 1 ]; then
+	mysql -u $USER -p$PASS -D $DB -h $HOST -e "UPDATE bandwith_logs SET server_ip='$local_1', server_port='$trusted_port', timestamp='$timestamp', ipaddress='$trusted_ip:$trusted_port', username='$common_name', time_in='$tm', since_connected='$time_ascii', bytes_received='$bytes_received', bytes_sent='$bytes_sent' WHERE username='$common_name' AND status='online' AND category='vip' "
+else
+	mysql -u $USER -p$PASS -D $DB -h $HOST -e "INSERT INTO bandwidth_logs (server_ip, server_port, timestamp, ipaddress, since_connected, username, bytes_received, bytes_sent, time_in, status, time, category) VALUES ('$local_1','$trusted_port','$timestamp','$trusted_ip:$trusted_port','$time_ascii','$common_name','$bytes_received','$bytes_sent','$dt','online','$tm','vip') "
+fi
+
+EOF
+ 
+ cat <<'EOF' >/etc/openvpn/script/disconnectvip.sh
+#!/bin/bash
+tm="$(date +%s)"
+dt="$(date +'%Y-%m-%d %H:%M:%S')"
+timestamp="$(date +'%FT%TZ')"
+
+. /etc/openvpn/script/config.sh
+
+mysql -u $USER -p$PASS -D $DB -h $HOST -e "UPDATE bandwidth_logs SET bytes_received='$bytes_received',bytes_sent='$bytes_sent',time_out='$dt', status='offline' WHERE username='$common_name' AND status='online' AND category='vip' "
+
+EOF
+
+ cat <<'EOF' >/etc/openvpn/script/connectprivate.sh
+#!/bin/bash
+
+tm="$(date +%s)"
+dt="$(date +'%Y-%m-%d %H:%M:%S')"
+timestamp="$(date +'%FT%TZ')"
+
+. /etc/openvpn/script/config.sh
+
+##set status online to user connected
+bandwidth_check=`mysql -u $USER -p$PASS -D $DB -h $HOST --skip-column-name -e "SELECT bandwidth_logs.username FROM bandwidth_logs WHERE bandwidth_logs.username='$common_name' AND bandwidth_logs.category='private' AND bandwidth_logs.status='online'"`
+if [ "$bandwidth_check" == 1 ]; then
+	mysql -u $USER -p$PASS -D $DB -h $HOST -e "UPDATE bandwith_logs SET server_ip='$local_1', server_port='$trusted_port', timestamp='$timestamp', ipaddress='$trusted_ip:$trusted_port', username='$common_name', time_in='$tm', since_connected='$time_ascii', bytes_received='$bytes_received', bytes_sent='$bytes_sent' WHERE username='$common_name' AND status='online' AND category='private' "
+else
+	mysql -u $USER -p$PASS -D $DB -h $HOST -e "INSERT INTO bandwidth_logs (server_ip, server_port, timestamp, ipaddress, since_connected, username, bytes_received, bytes_sent, time_in, status, time, category) VALUES ('$local_1','$trusted_port','$timestamp','$trusted_ip:$trusted_port','$time_ascii','$common_name','$bytes_received','$bytes_sent','$dt','online','$tm','private') "
+fi
+
+EOF
+
+ cat <<'EOF' >/etc/openvpn/script/disconnectprivate.sh
+#!/bin/bash
+tm="$(date +%s)"
+dt="$(date +'%Y-%m-%d %H:%M:%S')"
+timestamp="$(date +'%FT%TZ')"
+
+. /etc/openvpn/script/config.sh
+
+mysql -u $USER -p$PASS -D $DB -h $HOST -e "UPDATE bandwidth_logs SET bytes_received='$bytes_received',bytes_sent='$bytes_sent',time_out='$dt', status='offline' WHERE username='$common_name' AND status='online' AND category='private' "
+
+EOF
+ 
+ cat << EOF > /etc/openvpn/script/config.sh
+#!/bin/bash
+##Dababase Server
+HOST='$DatabaseHost'
+USER='$DatabaseUser'
+PASS='$DatabasePass'
+DB='$DatabaseName'
+PORT='3306'
+EOF
+
+ cat << EOF > /home/panel/html/online/tcp2.txt
+
+EOF
+
+ cat << EOF > /home/panel/html/online/udp2.txt
+
+EOF
+ 
  cat <<'myOpenVPNconf' > /etc/openvpn/server_tcp.conf
 # OpenVPN TCP
+mode server
 port OVPNTCP
 proto tcp
 dev tun
@@ -260,9 +506,10 @@ cert /etc/openvpn/server.crt
 key /etc/openvpn/server.key
 dh /etc/openvpn/dh2048.pem
 verify-client-cert none
+client-to-client
 username-as-common-name
 key-direction 0
-plugin /etc/openvpn/plugins/openvpn-plugin-auth-pam.so login
+auth-user-pass-verify "/etc/openvpn/script/MYCATEGORY" via-env
 server 10.200.0.0 255.255.0.0
 ifconfig-pool-persist ipp.txt
 push "route-method exe"
@@ -273,16 +520,21 @@ user nobody
 group nogroup
 persist-key
 persist-tun
-status openvpn-status.log
+client-connect /etc/openvpn/script/connectMYCATEGORY
+client-disconnect /etc/openvpn/script/disconnectMYCATEGORY
+status /home/panel/html/online/tcp2.txt
 log tcp.log
 verb 2
+script-security 3
 ncp-disable
 cipher none
 auth none
 myOpenVPNconf
+sed -i "s|MYCATEGORY|$MYCATEGORY|g" /etc/openvpn/server_tcp.conf
 
 cat <<'myOpenVPNconf2' > /etc/openvpn/server_udp.conf
 # OpenVPN UDP
+mode server
 port OVPNUDP
 proto udp
 dev tun
@@ -291,9 +543,10 @@ cert /etc/openvpn/server.crt
 key /etc/openvpn/server.key
 dh /etc/openvpn/dh2048.pem
 verify-client-cert none
+client-to-client
 username-as-common-name
 key-direction 0
-plugin /etc/openvpn/plugins/openvpn-plugin-auth-pam.so login
+auth-user-pass-verify "/etc/openvpn/script/MYCATEGORY" via-env
 server 10.201.0.0 255.255.0.0
 ifconfig-pool-persist ipp.txt
 push "route-method exe"
@@ -304,13 +557,21 @@ user nobody
 group nogroup
 persist-key
 persist-tun
-status openvpn-status.log
+client-connect /etc/openvpn/script/connectMYCATEGORY
+client-disconnect /etc/openvpn/script/disconnectMYCATEGORY
+status /home/panel/html/online/udp2.txt
 log udp.log
 verb 2
+script-security 3
 ncp-disable
 cipher none
 auth none
 myOpenVPNconf2
+sed -i "s|MYCATEGORY|$MYCATEGORY|g" /etc/openvpn/server_udp.conf
+
+# Change Scripts Permission
+ chmod +x /etc/openvpn/script/*
+ chmod 775 /home/panel/html/online/*
 
  cat <<'EOF7'> /etc/openvpn/ca.crt
 -----BEGIN CERTIFICATE-----
@@ -569,7 +830,7 @@ function InsProxy(){
  rm -rf /etc/privoxy/config*
  
  # Creating Privoxy server config using cat eof tricks
- cat <<'myPrivoxy' > /etc/privoxy/config
+ cat <<'privoxy' > /etc/privoxy/config
 # My Privoxy Server Config
 user-manual /usr/share/doc/privoxy/user-manual
 confdir /etc/privoxy
@@ -593,7 +854,7 @@ keep-alive-timeout 5
 tolerate-pipelining 1
 socket-timeout 300
 permit-access 0.0.0.0/0 IP-ADDRESS
-myPrivoxy
+privoxy
 
  # Setting machine's IP Address inside of our privoxy config(security that only allows this machine to use this proxy server)
  sed -i "s|IP-ADDRESS|$IPADDR|g" /etc/privoxy/config
@@ -613,6 +874,68 @@ http_access allow VPN
 http_access deny all 
 http_port 0.0.0.0:Squid_Port1
 http_port 0.0.0.0:Squid_Port2
+http_port 0.0.0.0:Squid_Port3
+### Allow Headers
+request_header_access Allow allow all 
+request_header_access Authorization allow all 
+request_header_access WWW-Authenticate allow all 
+request_header_access Proxy-Authorization allow all 
+request_header_access Proxy-Authenticate allow all 
+request_header_access Cache-Control allow all 
+request_header_access Content-Encoding allow all 
+request_header_access Content-Length allow all 
+request_header_access Content-Type allow all 
+request_header_access Date allow all 
+request_header_access Expires allow all 
+request_header_access Host allow all 
+request_header_access If-Modified-Since allow all 
+request_header_access Last-Modified allow all 
+request_header_access Location allow all 
+request_header_access Pragma allow all 
+request_header_access Accept allow all 
+request_header_access Accept-Charset allow all 
+request_header_access Accept-Encoding allow all 
+request_header_access Accept-Language allow all 
+request_header_access Content-Language allow all 
+request_header_access Mime-Version allow all 
+request_header_access Retry-After allow all 
+request_header_access Title allow all 
+request_header_access Connection allow all 
+request_header_access Proxy-Connection allow all 
+request_header_access User-Agent allow all 
+request_header_access Cookie allow all 
+request_header_access All deny all
+### HTTP Anonymizer Paranoid
+reply_header_access Allow allow all 
+reply_header_access Authorization allow all 
+reply_header_access WWW-Authenticate allow all 
+reply_header_access Proxy-Authorization allow all 
+reply_header_access Proxy-Authenticate allow all 
+reply_header_access Cache-Control allow all 
+reply_header_access Content-Encoding allow all 
+reply_header_access Content-Length allow all 
+reply_header_access Content-Type allow all 
+reply_header_access Date allow all 
+reply_header_access Expires allow all 
+reply_header_access Host allow all 
+reply_header_access If-Modified-Since allow all 
+reply_header_access Last-Modified allow all 
+reply_header_access Location allow all 
+reply_header_access Pragma allow all 
+reply_header_access Accept allow all 
+reply_header_access Accept-Charset allow all 
+reply_header_access Accept-Encoding allow all 
+reply_header_access Accept-Language allow all 
+reply_header_access Content-Language allow all 
+reply_header_access Mime-Version allow all 
+reply_header_access Retry-After allow all 
+reply_header_access Title allow all 
+reply_header_access Connection allow all 
+reply_header_access Proxy-Connection allow all 
+reply_header_access User-Agent allow all 
+reply_header_access Cookie allow all 
+reply_header_access All deny all
+### CoreDump
 coredump_dir /var/spool/squid
 dns_nameservers 8.8.8.8 8.8.4.4
 refresh_pattern ^ftp: 1440 20% 10080
@@ -628,6 +951,7 @@ mySquid
  # Setting squid ports
  sed -i "s|Squid_Port1|$Squid_Port1|g" /etc/squid/squid.conf
  sed -i "s|Squid_Port2|$Squid_Port2|g" /etc/squid/squid.conf
+ sed -i "s|Squid_Port3|$Squid_Port3|g" /etc/squid/squid.conf
 
  # Starting Proxy server
  echo -e "Restarting proxy server..."
@@ -652,10 +976,6 @@ myNginxC
  # Removing Default nginx page(port 80)
  rm -rf /etc/nginx/sites-*
 
- # Creating our root directory for all of our .ovpn configs
- rm -rf /var/www/openvpn
- mkdir -p /var/www/openvpn
-
  # Now creating all of our OpenVPN Configs 
 
 cat <<EOF15> /var/www/openvpn/gtmsnswnp.ovpn
@@ -670,6 +990,7 @@ cat <<EOF15> /var/www/openvpn/gtmsnswnp.ovpn
 client
 dev tun
 proto tcp
+setenv FRIENDLY_NAME "Debian VPN WNP"
 remote $IPADDR $OpenVPN_TCP_Port
 nobind
 persist-key
@@ -717,20 +1038,18 @@ cat <<EOF16> /var/www/openvpn/sun-tutcp.ovpn
 client
 dev tun
 proto tcp
+setenv FRIENDLY_NAME "Debian VPN SUN"
 remote $IPADDR $OpenVPN_TCP_Port
 remote-cert-tls server
 connect-retry infinite
 resolv-retry infinite
 nobind
-tun-mtu 1500
-mssfix 1460
 persist-key
 persist-tun
 auth-user-pass
 auth none
 auth-nocache
 cipher none
-keysize 0
 comp-lzo
 redirect-gateway def1
 setenv CLIENT_CERT 0
@@ -758,14 +1077,13 @@ cat <<EOF162> /var/www/openvpn/sun-tuudp.ovpn
 client
 dev tun
 proto udp
+setenv FRIENDLY_NAME "Debian VPN SUN"
 remote $IPADDR $OpenVPN_UDP_Port
 remote-cert-tls server
 resolv-retry infinite
 float
 fast-io
 nobind
-tun-mtu 1500
-mssfix 1460
 persist-key
 persist-remote-ip
 persist-tun
@@ -773,7 +1091,6 @@ auth-user-pass
 auth none
 auth-nocache
 cipher none
-keysize 0
 comp-lzo
 redirect-gateway def1
 setenv CLIENT_CERT 0
@@ -797,13 +1114,11 @@ cat <<EOF17> /var/www/openvpn/sun-noload.ovpn
 client
 dev tun
 proto tcp-client
+setenv FRIENDLY_NAME "Debian VPN WNP"
 remote $IPADDR $OpenVPN_TCP_Port
 remote-cert-tls server
 bind
 float
-tun-mtu 1500
-tun-mtu-extra 32
-mssfix 1450
 mute-replay-warnings
 connect-retry-max 9999
 redirect-gateway def1
@@ -817,7 +1132,6 @@ auth none
 auth-nocache
 auth-retry interact
 cipher none
-keysize 0
 comp-lzo
 reneg-sec 0
 verb 0
@@ -839,6 +1153,7 @@ cat <<EOF152> /var/www/openvpn/gtmwnp.ovpn
 client
 dev tun
 proto tcp-client
+setenv FRIENDLY_NAME "Debian VPN WNP"
 remote $IPADDR $OpenVPN_TCP_Port
 nobind
 persist-key
@@ -882,6 +1197,7 @@ cat <<EOF1152> /var/www/openvpn/gtmsns.ovpn
 client
 dev tun
 proto tcp-client
+setenv FRIENDLY_NAME "Debian VPN SNS"
 remote $IPADDR $OpenVPN_TCP_Port
 nobind
 persist-key
@@ -900,6 +1216,7 @@ connect-retry 0 1
 nice -20
 reneg-sec 0
 redirect-gateway def1
+setenv CLIENT_CERT 0
 dhcp-option DNS 1.1.1.1
 dhcp-option DNS 1.0.0.1
 http-proxy $IPADDR $Privoxy_Port1
@@ -926,6 +1243,7 @@ cat <<EOF1632> /var/www/openvpn/suntu-dns.ovpn
 client
 dev tun
 proto tcp-client
+setenv FRIENDLY_NAME "Debian VPN SUN"
 remote $IPADDR $OpenVPN_TCP_Port
 nobind
 persist-key
@@ -1053,7 +1371,7 @@ FordServ
  
 }
  #Create Admin
- useradd admin
+ useradd -m admin
  echo "admin:itangsagli" | chpasswd
 
 function ConfMenu(){
@@ -1072,12 +1390,27 @@ cd ~
 }
 
 function ScriptMessage(){
- echo -e " (｡◕‿◕｡) $MyScriptName VPS Installer"
+ echo -e " [\e[1;32m$MyScriptName VPS Installer\e[0m]"
  echo -e ""
- echo -e " Script by JohnFordTV"
+ echo -e " https://fb.com/johndesu090"
+ echo -e "[GCASH] 09206200840 [PAYPAL] johnford090@gmail.com"
  echo -e ""
 }
 
+function InstBadVPN(){
+ # Pull BadVPN Binary 64bit or 32bit
+if [ "$(getconf LONG_BIT)" == "64" ]; then
+ wget -O /usr/bin/badvpn-udpgw "https://github.com/johndesu090/AutoScriptDB/raw/master/Files/Plugins/badvpn-udpgw64"
+else
+ wget -O /usr/bin/badvpn-udpgw "https://github.com/johndesu090/AutoScriptDB/raw/master/Files/Plugins/badvpn-udpgw"
+fi
+ # Set BadVPN to Start on Boot via .profile
+ sed -i '$ i\screen -AmdS badvpn badvpn-udpgw --listen-addr 127.0.0.1:7300' /root/.profile
+ # Change Permission to make it Executable
+ chmod +x /usr/bin/badvpn-udpgw
+ # Start BadVPN via Screen
+ screen -AmdS badvpn badvpn-udpgw --listen-addr 127.0.0.1:7300
+}
 
 
 #############################################
@@ -1094,7 +1427,7 @@ function ScriptMessage(){
  source /etc/os-release
 if [[ "$ID" != 'debian' ]]; then
  ScriptMessage
- echo -e "[\e[1;31mError\e[0m] This script is for Debian only, exting..." 
+ echo -e "[\e[1;31mError\e[0m] This script is for Debian only, exiting..." 
  exit 1
 fi
 
@@ -1114,6 +1447,7 @@ fi
 fi
 
  # Begin Installation by Updating and Upgrading machine and then Installing all our wanted packages/services to be install.
+ InstCategory
  ScriptMessage
  sleep 2
  InstUpdates
@@ -1123,8 +1457,16 @@ fi
  InstSSH
  
  # Configure Stunnel
+ echo -e "Configuring apache2..."
+ InstApache
+ 
+ # Configure Stunnel
  echo -e "Configuring stunnel..."
  InsStunnel
+ 
+ # Configure BadVPN UDPGW
+ echo -e "Configuring BadVPN UDPGW..."
+ InstBadVPN
  
  # Configure Webmin
  echo -e "Configuring webmin..."
@@ -1145,16 +1487,16 @@ fi
  ConfStartup
 
  ## DNS maker plugin for SUN users(for vps script usage only)
- wget -qO dnsmaker "https://raw.githubusercontent.com/Bonveio/BonvScripts/master/DNSMaster/debian"
- chmod +x dnsmaker
- ./dnsmaker
- rm -rf dnsmaker
- sed -i "s|http-proxy $IPADDR|http-proxy $(cat /tmp/abonv_mydns)|g" /var/www/openvpn/suntu-dns.ovpn
- sed -i "s|remote $IPADDR|remote $(cat /tmp/abonv_mydns)|g" /var/www/openvpn/sun-tuudp.ovpn
- curl -4sSL "$(cat /tmp/abonv_mydns_domain)" &> /dev/null
- mv /tmp/abonv_mydns /etc/bonveio/my_domain_name
- mv /tmp/abonv_mydns_id /etc/bonveio/my_domain_id
- rm -rf /tmp/abonv*
+ #wget -qO dnsmaker "https://raw.githubusercontent.com/Bonveio/BonvScripts/master/DNSMaster/debian"
+ #chmod +x dnsmaker
+ #./dnsmaker
+ #rm -rf dnsmaker
+ #sed -i "s|http-proxy $IPADDR|http-proxy $(cat /tmp/abonv_mydns)|g" /var/www/openvpn/suntu-dns.ovpn
+ #sed -i "s|remote $IPADDR|remote $(cat /tmp/abonv_mydns)|g" /var/www/openvpn/sun-tuudp.ovpn
+ #curl -4sSL "$(cat /tmp/abonv_mydns_domain)" &> /dev/null
+ #mv /tmp/abonv_mydns /etc/bonveio/my_domain_name
+ #mv /tmp/abonv_mydns_id /etc/bonveio/my_domain_id
+ #rm -rf /tmp/abonv*
 
  # VPS Menu script v1.0
  ConfMenu
@@ -1193,10 +1535,11 @@ echo "   - IPv6        : [OFF]"  | tee -a log-install.txt
 echo ""  | tee -a log-install.txt
 echo "Application & Port Information"  | tee -a log-install.txt
 echo "   - OpenVPN		: TCP $OpenVPN_TCP_Port UDP $OpenVPN_UDP_Port "  | tee -a log-install.txt
-echo "   - OpenSSH  	: $SSH_Port1, $SSH_Port2 "  | tee -a log-install.txt
+echo "   - OpenSSH		: $SSH_Port1, $SSH_Port2 "  | tee -a log-install.txt
 echo "   - Dropbear		: $Dropbear_Port1, $Dropbear_Port2"  | tee -a log-install.txt
 echo "   - Stunnel/SSL 	: $Stunnel_Port1, $Stunnel_Port2"  | tee -a log-install.txt
 echo "   - Squid Proxy	: $Squid_Port1 , $Squid_Port2 (limit to IP Server)"  | tee -a log-install.txt
+echo "   - Squid ELITE	: $Squid_Port3 (limit to IP Server)"  | tee -a log-install.txt
 echo "   - Privoxy		: $Privoxy_Port1 , $Privoxy_Port2 (limit to IP Server)"  | tee -a log-install.txt
 echo ""  | tee -a log-install.txt
 echo ""  | tee -a log-install.txt
@@ -1208,6 +1551,10 @@ echo "Important Information"  | tee -a log-install.txt
 echo "   - Installation Log        : cat /root/log-install.txt"  | tee -a log-install.txt
 echo ""  | tee -a log-install.txt
 echo "   - Webmin                  : http://$IPADDR:10000/"  | tee -a log-install.txt
+echo ""  | tee -a log-install.txt
+echo ""  | tee -a log-install.txt
+echo "OpenVPN Configs Download"  | tee -a log-install.txt
+echo "   - Download Link           : http://$IPADDR:85/configs.zip"  | tee -a log-install.txt
 echo " ©JohnFordTV"  | tee -a log-install.txt
 echo " Facebook: https://fb.me/johndesu090"  | tee -a log-install.txt
 echo ""  | tee -a log-install.txt
@@ -1217,5 +1564,5 @@ echo " Please Reboot your VPS"
  # Clearing all logs from installation
  rm -rf /root/.bash_history && history -c && echo '' > /var/log/syslog
 
-rm -f DB*
+rm -f DBY*
 exit 1

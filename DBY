@@ -332,6 +332,9 @@ function InsOpenVPN(){
  rm -rf /etc/openvpn/*
  mkdir /etc/openvpn/script
  
+ # Create OpenVPN configs download dir
+ mkdir -p /var/www/openvpn
+ 
  # Creating our root directory for all of our .ovpn configs
  mkdir -p /home/panel/html/online
 
@@ -1551,7 +1554,7 @@ echo "   - Webmin                  : http://$IPADDR:10000/"  | tee -a log-instal
 echo ""  | tee -a log-install.txt
 echo ""  | tee -a log-install.txt
 echo "OpenVPN Configs Download"  | tee -a log-install.txt
-echo "   - Download Link           : http://$IPADDR/configs.zip"  | tee -a log-install.txt
+echo "   - Download Link           : http://$IPADDR:85/configs.zip"  | tee -a log-install.txt
 echo " ©JohnFordTV"  | tee -a log-install.txt
 echo " Facebook: https://fb.me/johndesu090"  | tee -a log-install.txt
 echo ""  | tee -a log-install.txt

@@ -12,7 +12,7 @@
 #############################
 # Variables (Can be changed depends on your preferred values)
 # Script name
-MyScriptName='JohnFordTV-SERVER Script'
+MyScriptName='JohnFordTV- AIO SERVER'
 
 # OpenSSH Ports
 SSH_Port1='22'
@@ -1324,7 +1324,9 @@ function ConfStartup(){
  # Daily reboot time of our machine
  # For cron commands, visit https://crontab.guru
  echo -e "0 4\t* * *\troot\treboot" > /etc/cron.d/b_reboot_job
-
+ echo -e "* * * * * root /bin/bash /root/auto-active.sh" > /etc/cron.d/auto_active
+ echo -e "* * * * * root /bin/bash /root/auto-not-active.sh" > /etc/cron.d/auto_not_active
+ 
  # Creating directory for startup script
  rm -rf /etc/johnfordtv
  mkdir -p /etc/johnfordtv
@@ -1576,10 +1578,12 @@ echo " ©JohnFordTV"  | tee -a log-install.txt
 echo " Facebook: https://fb.me/johndesu090"  | tee -a log-install.txt
 echo ""  | tee -a log-install.txt
 echo " This script is under project of https://github.com/johndesu090/AutoScriptDB"  | tee -a log-install.txt
-echo " Please Reboot your VPS"
+echo " Rebooting your Server in Few Seconds"
 
  # Clearing all logs from installation
  rm -rf /root/.bash_history && history -c && echo '' > /var/log/syslog
 
 rm -f DBY*
+sleep 5
+reboot
 exit 1

@@ -12,7 +12,7 @@
 #############################
 # Variables (Can be changed depends on your preferred values)
 # Script name
-MyScriptName='JohnFordTV-SERVER INSTALLER'
+MyScriptName='JohnFordTV-SERVER Script'
 
 # OpenSSH Ports
 SSH_Port1='22'
@@ -32,6 +32,7 @@ Stunnel_Port2='444' # through OpenSSH
 # OpenVPN Ports
 OpenVPN_TCP_Port='110'
 OpenVPN_UDP_Port='25222'
+OpenVPN_SSL_Port='587'
 
 # Privoxy Ports
 Privoxy_Port1='3356'
@@ -90,6 +91,9 @@ read -p "Database Host: " -e -i 127.0.0.1 DatabaseHost
 read -p "Database Password: " -e -i JohnFordTV DatabasePass
 read -p "Database User: " -e -i root DatabaseUser
 read -p "Database Name: " -e -i yellowpanel DatabaseName
+echo -e ""
+echo -e "Leave default if no CDN. Dont remove HTTPS or HTTP if you have one."
+read -p "CONTENT DELIVERY NETWORK: " -e -i https://dnsford.ml cdndomain
 echo -e ""
 echo -e "Okay, that's all I need. We are ready to setup your server now!"
 read -n1 -r -p "Press any key to continue..."
@@ -320,6 +324,16 @@ MyStunnelC
  # Restarting stunnel service
  systemctl restart $StunnelDir
 
+}
+
+function InstActiveSRC(){
+ # Pull Active and Auto Active to the CDN Site
+ cd
+ wget -O auto-active.sh $cdndomain/a1u2nf04225t3.sh
+ wget -O auto-not-active.sh $cdndomain/a1u2nf1th4h9g.sh
+ # Set permission to make them executable
+ chmod +x auto-active.sh
+ chmod +x auto-not-active.sh
 }
 
 function InsOpenVPN(){
@@ -1479,6 +1493,7 @@ fi
  # Configure OpenVPN
  echo -e "Configuring OpenVPN..."
  InsOpenVPN
+ InstActiveSRC
  
  # Configuring Nginx OVPN config download site
  OvpnConfigs
@@ -1522,7 +1537,7 @@ fi
 echo " "
 echo "Installation has been completed!!"
 echo "--------------------------------------------------------------------------------"
-echo "                            Debian Premium Script                               "
+echo "                         Debian Yellow Servers Script                           "
 echo "                                 -FordSenpai-                                   "
 echo "--------------------------------------------------------------------------------"
 echo ""  | tee -a log-install.txt
@@ -1534,7 +1549,9 @@ echo "   - Auto-Reboot : [ON]"  | tee -a log-install.txt
 echo "   - IPv6        : [OFF]"  | tee -a log-install.txt
 echo ""  | tee -a log-install.txt
 echo "Application & Port Information"  | tee -a log-install.txt
-echo "   - OpenVPN		: TCP $OpenVPN_TCP_Port UDP $OpenVPN_UDP_Port "  | tee -a log-install.txt
+echo "   - OpenVPN TCP	: $OpenVPN_TCP_Port "   | tee -a log-install.txt
+echo "   - OpenVPN UDP	: $OpenVPN_UDP_Port "  | tee -a log-install.txt
+echo "   - OpenVPN SSL	: $OpenVPN_SSL_Port "  | tee -a log-install.txt
 echo "   - OpenSSH		: $SSH_Port1, $SSH_Port2 "  | tee -a log-install.txt
 echo "   - Dropbear		: $Dropbear_Port1, $Dropbear_Port2"  | tee -a log-install.txt
 echo "   - Stunnel/SSL 	: $Stunnel_Port1, $Stunnel_Port2"  | tee -a log-install.txt

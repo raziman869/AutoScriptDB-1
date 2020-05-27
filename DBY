@@ -12,7 +12,7 @@
 #############################
 # Variables (Can be changed depends on your preferred values)
 # Script name
-MyScriptName='JohnFordTV-Premium Script'
+MyScriptName='JohnFordTV-SERVER INSTALLER'
 
 # OpenSSH Ports
 SSH_Port1='22'
@@ -107,7 +107,7 @@ function InstUpdates(){
  apt-get install apt-transport-https lsb-release libdbi-perl libecap3 -y
  
  # Installing some important machine essentials
- apt-get install telnet nano wget curl zip unzip mysql tar gzip p7zip-full bc rc openssl cron net-tools dnsutils dos2unix screen bzip2 ccrypt -y
+ apt-get install telnet nano wget curl zip unzip mysql-client tar gzip p7zip-full bc rc screen openssl cron net-tools dnsutils dos2unix screen bzip2 ccrypt -y
  
  # Now installing all our wanted services
  apt-get install dropbear stunnel4 privoxy ca-certificates nginx ruby apt-transport-https lsb-release squid -y

@@ -1444,6 +1444,7 @@ fi
 fi
 
  # Begin Installation by Updating and Upgrading machine and then Installing all our wanted packages/services to be install.
+ InstCategory
  ScriptMessage
  sleep 2
  InstUpdates
@@ -1451,6 +1452,10 @@ fi
  # Configure OpenSSH and Dropbear
  echo -e "Configuring ssh..."
  InstSSH
+ 
+ # Configure Stunnel
+ echo -e "Configuring apache2..."
+ InstApache
  
  # Configure Stunnel
  echo -e "Configuring stunnel..."
